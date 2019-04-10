@@ -202,6 +202,21 @@ p50 %>%
       summary()
 
 
+
+### quadratic term?
+
+pca <- prcomp(select(p50, djf, jja) %>% scale())
+md <- data.frame(clim=pca$x[,1],
+                 p50=p50$p50) %>%
+      mutate(clim2=clim^2)
+m <- lm(p50 ~ clim + clim2, data=md)
+md$pred <- predict(m, md)
+
+ggplot(md, aes(clim, pred)) + geom_line()
+
+
+###################################
+
 # attempt to control for distance using pairwise differences
 pw_p50_diff ~ pw_cwd_diff + geo_dist
 
@@ -378,4 +393,72 @@ ggplot(pd, aes(DJF, pred, group=paste(JJA, tissue), color=tissue)) +
       geom_line()
 ggplot(pd, aes(JJA, pred, group=paste(DJF, tissue), color=tissue)) +
       geom_line()
+
+
+
+
+
+
+### quadratic term?
+
+x <- p50 %>% filter(var %in% c("JJA", "DJF")) %>%
+      select(popnumber, individual, site, tissue, p50, var, value, radius) %>%
+      spread(var, value) %>%
+      split(.$radius)
+x <- lapply(x, function(y){
+      
+      pca <- prcomp(select(y, JJA, DJF) %>% scale())
+      md <- y %>% mutate(clim=pca$x[,1]) %>%
+            mutate(clim2=clim^2)
+      m <- lm(p50 ~ clim + clim2 + site + tissue, data=md)
+      md$pred <- predict(m, md)
+      md$radius <- y$radius
+      return(md)
+})
+x <- do.call("rbind", x)
+
+
+ggplot(x, aes(clim, pred, color=factor(radius))) + 
+      geom_line() +
+      facet_grid(tissue ~ site, scales="free")
+
+
+
+# single continuum?
+
+x <- p50 %>% filter(var %in% c("JJA", "DJF")) %>%
+      select(popnumber, individual, site, tissue, p50, var, value, radius) %>%
+      #spread(var, value) %>%
+      split(.$radius)
+x <- lapply(x, function(y){
+      
+      md <- y %>% mutate(clim=scale(value)) %>%
+            mutate(clim2=clim^2) %>%
+            mutate(clim=as.numeric(clim), clim2=as.numeric(clim2))
+      m <- lm(p50 ~ clim + clim2 + site + tissue, data=md)
+      md2 <- expand.grid(site=unique(md$site), 
+                         tissue=unique(md$tissue),
+                        clim=seq(min(md$clim), max(md$clim), length.out=100)) %>%
+            mutate(clim2=clim^2)
+      md2$pred <- predict(m, md2)
+      md$pred <- predict(m, md)
+      md2$radius <- y$radius[1]
+      md$radius <- y$radius[1]
+      return(list(md=md, md2=md2))
+})
+x2 <- map(x, "md2") %>% do.call("rbind", .)
+x <- map(x, "md") %>% do.call("rbind", .)
+
+
+ggplot() + 
+      #geom_line(data=x2, aes(clim, pred, color=factor(radius))) +
+      geom_line(data=x, aes(clim, pred, color=factor(radius))) +
+      geom_point(data=x, aes(clim, pred, color=factor(radius))) +
+      #geom_point(data=x, aes(clim, p50, color=factor(radius))) +
+      facet_grid(tissue ~ site, scales="free") +
+      labs(x="continuum from winter min to summer max\n(scaled for each radius distance)",
+           y="predicted p50",
+           color="radius (km)",
+           title="quadratic regression, with jja and djf on a single continuum. probably terrible method.\n(weird but maybe cool? suggests both ends of the spectrum may drive p50)")
+ggsave(filename = paste0("figures/16.png"), width=8, height=8, units="in")
 
