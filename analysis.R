@@ -23,6 +23,7 @@ i <- read_tsv("Finalrevised2analysis_Qd2018.txt") %>%
 # view all response curves
 ggplot(i, aes(lwp_MPa, embolism, color=individual, order=lwp_MPa)) +
       geom_line() +
+      xlim(-8, NA) +
       facet_grid(popnumber ~ site + tissue)
 ggsave(filename = paste0("figures/1.png"), width=8, height=8, units="in")
 
